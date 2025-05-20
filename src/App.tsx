@@ -14,6 +14,7 @@ import DashboardPage from './pages/DashboardPage';
 import DocumentsPage from './pages/DocumentsPage';
 import DocumentEditorPage from './pages/DocumentEditorPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import HumanizerPage from './pages/HumanizerPage';
 
 function App() {
   return (
@@ -50,6 +51,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <DocumentEditorPage />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/humanizer" 
+                  element={
+                    <ProtectedRoute>
+                      <HumanizerPage />
                     </ProtectedRoute>
                   } 
                 />
