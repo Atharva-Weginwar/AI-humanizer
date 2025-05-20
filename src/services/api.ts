@@ -105,33 +105,79 @@ export const checkUserCredits = async () => {
   }
 };
 
-export const humanizeText = async (text: string, settings: any) => {
-  // 1. Submit the document
-  const submitResponse = await submitDocument(text, settings);
-  const documentId = submitResponse.id;
-  
-  // 2. Poll for status every 5 seconds
-  const maxAttempts = 12; // 1 minute timeout
-  let attempts = 0;
-  let result;
-  
-  while (attempts < maxAttempts) {
-    attempts++;
-    const documentResponse = await pollDocumentStatus(documentId);
+export const humanizeText = async (text: string, settings: any, userId: string) => {
+  try {
+    // Calculate required credits (1 credit per character)
+    const requiredCredits = text.length;
     
-    // Check if processing is complete
-    if (documentResponse.output) {
-      result = documentResponse;
-      break;
+    // Deduct credits before processing
+    await deductCredits(userId, requiredCredits, 'Text humanization');
+    
+    // Submit the document
+    const submitResponse = await submitDocument(text, settings);
+    const documentId = submitResponse.id;
+    
+    // Poll for status every 5 seconds
+    const maxAttempts = 12; // 1 minute timeout
+    let attempts = 0;
+    let result;
+    
+    while (attempts < maxAttempts) {
+      attempts++;
+      const documentResponse = await pollDocumentStatus(documentId);
+      
+      // Check if processing is complete
+      if (documentResponse.output) {
+        result = documentResponse;
+        break;
+      }
+      
+      // Wait 5 seconds before polling again
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
     
-    // Wait 5 seconds before polling again
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    if (!result) {
+      throw new Error("Document processing timed out");
+    }
+    
+    return result;
+  } catch (error) {
+    // If humanization fails, refund the credits
+    if (error.message !== 'Insufficient credits') {
+      try {
+        await recordCreditTransaction(
+          userId,
+          text.length,
+          'Refund for failed humanization',
+          'refund'
+        );
+      } catch (refundError) {
+        console.error('Failed to refund credits:', refundError);
+      }
+    }
+    throw error;
   }
-  
-  if (!result) {
-    throw new Error("Document processing timed out");
+};
+
+export const deductCredits = async (userId: string, amount: number, description: string) => {
+  const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/rest/v1/rpc/deduct_credits`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+    },
+    body: JSON.stringify({
+      p_user_id: userId,
+      p_amount: amount,
+      p_description: description
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to deduct credits');
   }
-  
-  return result;
+
+  return response.json();
 };

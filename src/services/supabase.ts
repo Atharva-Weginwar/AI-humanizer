@@ -39,8 +39,16 @@ export const signIn = async (email: string, password: string) => {
 };
 
 export const signOut = async () => {
+  // Clear all storage
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  
+  // Sign out from Supabase
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
+  
+  // Clear any remaining auth state
+  await supabase.auth.clearSession();
 };
 
 export const getCurrentUser = async () => {
@@ -122,6 +130,44 @@ export const getUserCredits = async (userId: string) => {
   
   if (error) throw error;
   return data;
+};
+
+export const deductCredits = async (userId: string, amount: number, description: string) => {
+  // Start a Supabase transaction
+  const { data: user, error: userError } = await supabase
+    .from('users')
+    .select('credits_remaining')
+    .eq('id', userId)
+    .single();
+
+  if (userError) throw userError;
+  if (!user) throw new Error('User not found');
+  
+  if (user.credits_remaining < amount) {
+    throw new Error('Insufficient credits');
+  }
+
+  // Update user credits
+  const { error: updateError } = await supabase
+    .from('users')
+    .update({ credits_remaining: user.credits_remaining - amount })
+    .eq('id', userId);
+
+  if (updateError) throw updateError;
+
+  // Record the transaction
+  const { error: transactionError } = await supabase
+    .from('credit_transactions')
+    .insert([{
+      user_id: userId,
+      amount: -amount,
+      description,
+      transaction_type: 'usage'
+    }]);
+
+  if (transactionError) throw transactionError;
+
+  return user.credits_remaining - amount;
 };
 
 export const recordCreditTransaction = async (userId: string, amount: number, description: string, transactionType: string) => {
