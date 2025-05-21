@@ -39,16 +39,19 @@ const HumanizerTool: React.FC<HumanizerToolProps> = ({
   useEffect(() => {
     // Fetch API credits on component mount
     const fetchCredits = async () => {
+      if (!user) return;
+      
       try {
-        const creditData = await checkUserCredits();
+        const creditData = await checkUserCredits(user.id);
         setApiCredits(creditData.credits);
       } catch (err) {
         console.error('Failed to fetch credits:', err);
+        toast.error('Failed to fetch credits');
       }
     };
     
     fetchCredits();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (initialText) {
@@ -57,6 +60,11 @@ const HumanizerTool: React.FC<HumanizerToolProps> = ({
   }, [initialText]);
 
   const handleHumanize = async () => {
+    if (!user) {
+      setError('Please log in to use this feature');
+      return;
+    }
+
     if (inputText.length < 50) {
       setError('Text must be at least 50 characters long');
       return;
@@ -71,33 +79,31 @@ const HumanizerTool: React.FC<HumanizerToolProps> = ({
     setError(null);
     
     try {
-      const result = await humanizeText(inputText, settings);
+      const result = await humanizeText(inputText, settings, user.id);
       setOutputText(result.output);
       setUdDocumentId(result.id);
       
       // Update credits after humanization
-      const updatedCredits = await checkUserCredits();
+      const updatedCredits = await checkUserCredits(user.id);
       setApiCredits(updatedCredits.credits);
       
       // Save to history in Supabase if user is logged in
-      if (user) {
-        if (documentId && onSave) {
-          // Update existing document
-          // This would be handled in the DocumentEditorPage
-        } else {
-          // Create new document
-          await saveDocument(
-            user.id,
-            documentTitle,
-            inputText,
-            result.output,
-            settings,
-            result.id
-          );
-          
-          toast.success('Document saved successfully');
-          await refreshCredits();
-        }
+      if (documentId && onSave) {
+        // Update existing document
+        // This would be handled in the DocumentEditorPage
+      } else {
+        // Create new document
+        await saveDocument(
+          user.id,
+          documentTitle,
+          inputText,
+          result.output,
+          settings,
+          result.id
+        );
+        
+        toast.success('Document saved successfully');
+        await refreshCredits();
       }
       
     } catch (err: any) {
