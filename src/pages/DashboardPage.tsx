@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useUser } from '../contexts/UserContext';
 import { getDocuments } from '../services/supabase';
 import { checkUserCredits } from '../services/api';
 import { FileText, Plus, CreditCard, BarChart2, Clock, AlertTriangle } from 'lucide-react';
 import LoadingIndicator from '../components/ui/LoadingIndicator';
+import { toast } from 'react-hot-toast';
 
 type Document = {
   id: string;
@@ -15,40 +16,67 @@ type Document = {
 
 const DashboardPage: React.FC = () => {
   const { user, credits, planType, refreshCredits } = useUser();
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [apiCredits, setApiCredits] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
       setLoading(true);
+      setError(null);
+
       try {
-        if (user) {
-          // Fetch documents
-          const docs = await getDocuments(user.id);
-          setDocuments(docs.slice(0, 5)); // Get only the 5 most recent documents
-          
-          // Fetch API credits
-          const creditData = await checkUserCredits();
-          setApiCredits(creditData.credits);
-          
-          // Refresh user credits from database
-          await refreshCredits();
-        }
-      } catch (error) {
+        // Fetch documents
+        const docs = await getDocuments(user.id);
+        setDocuments(docs.slice(0, 5)); // Get only the 5 most recent documents
+        
+        // Fetch API credits
+        const creditData = await checkUserCredits(user.id);
+        setApiCredits(creditData.credits);
+        
+        // Refresh user credits from database
+        await refreshCredits();
+      } catch (error: any) {
         console.error('Error fetching dashboard data:', error);
+        setError(error.message || 'Failed to load dashboard data');
+        toast.error(error.message || 'Failed to load dashboard data');
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [user, refreshCredits]);
+  }, [user, refreshCredits, navigate]);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <LoadingIndicator size="large" message="Loading dashboard..." />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-sm p-6 max-w-lg w-full text-center">
+          <AlertTriangle className="mx-auto h-12 w-12 text-red-500" />
+          <h3 className="mt-2 text-lg font-medium text-gray-900">Error Loading Dashboard</h3>
+          <p className="mt-1 text-sm text-gray-500">{error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Try Again
+          </button>
+        </div>
       </div>
     );
   }
